@@ -8,7 +8,7 @@ from app.db.models import Base, LabeledMessage
 
 load_dotenv()
 
-db_url = os.getenv("DATABASE_URL")
+db_url = os.getenv("NEON_POSTGRES_DATABASE_URL")
 
 engine = create_engine(db_url if db_url is not None else "")
 
