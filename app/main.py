@@ -42,8 +42,7 @@ async def read_dataset(file: UploadFile):
 
     parser = csv.DictReader(buffer)
 
-    errors: list[str] = []
-    data: list[LabeledMessage] = []
+    labeled_messages: list[LabeledMessage] = []
 
     for row in parser:
         message = row["message"].lower()
@@ -51,7 +50,7 @@ async def read_dataset(file: UploadFile):
 
         if len(message) > 0 and len(is_spam) > 0:
             try:
-                data.append(
+                labeled_messages.append(
                     LabeledMessage(
                         message=message,
                         message_hash=hashlib.md5(message.encode()).hexdigest(),
@@ -63,15 +62,14 @@ async def read_dataset(file: UploadFile):
                     status_code=404, detail=f"ValueError: {row['is_spam']}"
                 )
 
-        try:
-            create_labeled_messages(data)
-        except IntegrityError:
-            raise HTTPException(
-                status_code=400,
-                detail="There is data that already exists in the database. Please remove duplicates or rows that were uploaded before.",
-            )
+    try:
+        create_labeled_messages(labeled_messages)
+    except IntegrityError:
+        raise HTTPException(
+            status_code=400,
+            detail="There is data that already exists in the database. Please remove duplicates or rows that were uploaded before.",
+        )
 
     return {
         "file": {"name": file.filename, "size": file.size},
-        "operation": {"errors": errors},
     }
