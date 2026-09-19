@@ -1,13 +1,18 @@
 import csv
+import hashlib
 from io import StringIO
 
 from fastapi import FastAPI, HTTPException, UploadFile
+from sqlalchemy.exc import IntegrityError
 
+from app.db.database import create_labeled_messages, create_tables
+from app.db.models import LabeledMessage
 from app.utils import increase_csv_field_size_limit
 
 app = FastAPI()
 
 increase_csv_field_size_limit()
+create_tables()
 
 
 @app.get("/")
@@ -37,9 +42,36 @@ async def read_dataset(file: UploadFile):
 
     parser = csv.DictReader(buffer)
 
-    data = []
+    errors: list[str] = []
+    data: list[LabeledMessage] = []
 
     for row in parser:
-        data.append(row.copy())
+        message = row["message"].lower()
+        is_spam = row["is_spam"]
 
-    return {"file": {"name": file.filename, "size": file.size}, "data": data}
+        if len(message) > 0 and len(is_spam) > 0:
+            try:
+                data.append(
+                    LabeledMessage(
+                        message=message,
+                        message_hash=hashlib.md5(message.encode()).hexdigest(),
+                        is_spam=int(is_spam),
+                    )
+                )
+            except ValueError:
+                raise HTTPException(
+                    status_code=404, detail=f"ValueError: {row['is_spam']}"
+                )
+
+        try:
+            create_labeled_messages(data)
+        except IntegrityError:
+            raise HTTPException(
+                status_code=400,
+                detail="There is data that already exists in the database. Please remove duplicates or rows that were uploaded before.",
+            )
+
+    return {
+        "file": {"name": file.filename, "size": file.size},
+        "operation": {"errors": errors},
+    }
