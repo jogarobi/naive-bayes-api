@@ -35,26 +35,24 @@ def create_labeled_messages(messages: list[LabeledMessage]):
 
 
 def read_measures() -> dict[str, int]:
-    session = Session(engine)
+    with Session(engine) as session:
+        statement = select(Measure)
 
-    statement = select(Measure)
+        measures: dict[str, int] = {}
 
-    measures: dict[str, int] = {}
+        for measure in session.scalars(statement).all():
+            measures[measure.name] = measure.value
 
-    for measure in session.scalars(statement).all():
-        measures[measure.name] = measure.value
-
-    return measures
+        return measures
 
 
 def read_word(word: str, is_from_spam: bool):
-    session = Session(engine)
+    with Session(engine) as session:
+        statement = select(LabeledWord).where(
+            LabeledWord.word.ilike(word), LabeledWord.is_from_spam.__eq__(is_from_spam)
+        )
 
-    statement = select(LabeledWord).where(
-        LabeledWord.word.ilike(word), LabeledWord.is_from_spam.__eq__(is_from_spam)
-    )
-
-    return [
-        {"labeled_word": labeled_word.word, "count": labeled_word.occurrences}
-        for labeled_word in list(session.scalars(statement).all())
-    ]
+        return [
+            {"labeled_word": labeled_word.word, "count": labeled_word.occurrences}
+            for labeled_word in list(session.scalars(statement).all())
+        ]
