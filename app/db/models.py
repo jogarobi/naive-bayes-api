@@ -38,7 +38,7 @@ class LabeledWord(Base):
     )
 
 
-class Measures(Base):
+class Measure(Base):
     __tablename__ = "measures"
 
     id: Mapped[int] = mapped_column(primary_key=True)
