@@ -9,10 +9,8 @@ from app.models import LabeledMessage
 from app.services import (
     DatabaseService,
     LabeledMessageService,
-    LabeledWordService,
-    MeasureService,
 )
-from app.utils import Utils
+from app.utils import Classifier, Utils
 
 app = FastAPI()
 
@@ -76,74 +74,9 @@ async def read_dataset(file: UploadFile):
 
 @app.post("/message/predict")
 async def classify_message(message: str):
+    classifier = Classifier()
 
-    service = MeasureService()
-
-    measures = service.read_measures()
-
-    smoother = measures["unique_spam_words"] + measures["unique_non_spam_words"]
-
-    def get_word_likelihood(word: str, is_spam: bool) -> float:
-        service = LabeledWordService()
-        count = 1
-        prop = "total_spam_words" if is_spam else "total_non_spam_words"
-
-        dataset_word = service.read_word(word, is_from_spam=is_spam)
-
-        if len(dataset_word) > 0:
-            count += dataset_word[0]["count"]
-
-        return count / (measures[prop] + smoother)
-
-    def get_message_prediction(message: str) -> tuple[float, float]:
-        words = Utils.split_str(message)
-
-        spam_prior_probability = measures["spam_messages"] / measures["total_messages"]
-        not_spam_prior_probability = (
-            measures["non_spam_messages"] / measures["total_messages"]
-        )
-
-        spam_probabilities: list[float] = []
-        not_spam_probabilities: list[float] = []
-
-        for word in words:
-            normalized_word = word.lower()
-            spam_probabilities.append(
-                get_word_likelihood(normalized_word, is_spam=True)
-            )
-            not_spam_probabilities.append(
-                get_word_likelihood(normalized_word, is_spam=False)
-            )
-
-        total_not_spam_likelihood = not_spam_probabilities[0]
-        total_spam_likelihood = spam_probabilities[0]
-
-        for index, current_probability in enumerate(spam_probabilities):
-            if index == 0:
-                continue
-
-            total_spam_likelihood *= current_probability
-
-        for index, current_probability in enumerate(not_spam_probabilities):
-            if index == 0:
-                continue
-
-            total_not_spam_likelihood *= current_probability
-
-        total_spam_likelihood *= spam_prior_probability
-        total_not_spam_likelihood *= not_spam_prior_probability
-
-        spam_probability = total_spam_likelihood / (
-            total_spam_likelihood + total_not_spam_likelihood
-        )
-
-        not_spam_probability = total_not_spam_likelihood / (
-            total_spam_likelihood + total_not_spam_likelihood
-        )
-
-        return (spam_probability, not_spam_probability)
-
-    prediction = get_message_prediction(message)
+    prediction = classifier.get_message_prediction(message)
     spam_prediction = prediction[0] * 100
     not_spam_prediction = prediction[1] * 100
 
