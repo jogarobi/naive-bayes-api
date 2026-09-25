@@ -1,4 +1,5 @@
 import csv
+import math
 import sys
 
 from app.services import LabeledWordService, MeasureService
@@ -20,12 +21,12 @@ class Classifier:
         self.measure_service = MeasureService()
         self.measures = self.measure_service.read_measures()
         self.smoother = (
-            self.measures["unique_spam_words"] + self.measures["unique_non_spam_words"]
+            self.measures["unique_spam_words"] + self.measures["unique_not_spam_words"]
         )
 
     def get_word_likelihood(self, word: str, is_spam: bool) -> float:
         count = 1
-        word_type = "total_spam_words" if is_spam else "total_non_spam_words"
+        label = "total_spam_words" if is_spam else "total_not_spam_words"
 
         word_from_dataset = self.labeled_word_service.read_word(
             word, is_from_spam=is_spam
@@ -34,52 +35,32 @@ class Classifier:
         if len(word_from_dataset) > 0:
             count += word_from_dataset[0]["count"]
 
-        return count / (self.measures[word_type] + self.smoother)
+        return count / (self.measures[label] + self.smoother)
 
     def get_message_prediction(self, message: str) -> tuple[float, float]:
         words = message.lower().split()
 
-        prior_probabilities: dict[str, float] = {
-            "spam": self.measures["spam_messages"] / self.measures["total_messages"],
-            "not_spam": self.measures["non_spam_messages"]
-            / self.measures["total_messages"],
+        scores = {}
+
+        for label in ("spam", "not_spam"):
+            is_spam = label == "spam"
+
+            prior_probability = (
+                self.measures[f"{'spam' if is_spam else 'not_spam'}_messages"]
+                / self.measures["total_messages"]
+            )
+
+            scores[label] = math.log(prior_probability) + sum(
+                math.log(self.get_word_likelihood(word, is_spam)) for word in words
+            )
+
+        highest_score = max(scores.values())
+        final_probabilities = {
+            label: math.exp(score - highest_score) for label, score in scores.items()
         }
+        total_probability = sum(final_probabilities.values())
 
-        likelihoods: dict[str, list[float]] = {"spam": [], "not_spam": []}
-
-        for word in words:
-            normalized_word = word.lower()
-            likelihoods["spam"].append(
-                self.get_word_likelihood(normalized_word, is_spam=True)
-            )
-            likelihoods["not_spam"].append(
-                self.get_word_likelihood(normalized_word, is_spam=False)
-            )
-
-        total_not_spam_likelihood = likelihoods["not_spam"][0]
-        total_spam_likelihood = likelihoods["spam"][0]
-
-        for index, current_probability in enumerate(likelihoods["spam"]):
-            if index == 0:
-                continue
-
-            total_spam_likelihood *= current_probability
-
-        for index, current_probability in enumerate(likelihoods["not_spam"]):
-            if index == 0:
-                continue
-
-            total_not_spam_likelihood *= current_probability
-
-        total_spam_likelihood *= prior_probabilities["spam"]
-        total_not_spam_likelihood *= prior_probabilities["not_spam"]
-
-        spam_probability = total_spam_likelihood / (
-            total_spam_likelihood + total_not_spam_likelihood
+        return (
+            final_probabilities["spam"] / total_probability,
+            final_probabilities["not_spam"] / total_probability,
         )
-
-        not_spam_probability = total_not_spam_likelihood / (
-            total_spam_likelihood + total_not_spam_likelihood
-        )
-
-        return (spam_probability, not_spam_probability)
