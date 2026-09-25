@@ -10,11 +10,11 @@ from app.services import (
     DatabaseService,
     LabeledMessageService,
 )
-from app.utils import Classifier, Utils
+from app.utils import Classifier, increase_csv_field_size_limit
 
 app = FastAPI()
 
-Utils.increase_csv_field_size_limit()
+increase_csv_field_size_limit()
 
 conn = DatabaseService()
 conn.create_tables()
