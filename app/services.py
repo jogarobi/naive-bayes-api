@@ -40,9 +40,7 @@ class MeasureService:
         with create_session() as session:
             statement = select(Measure)
 
-            measures: dict[str, int] = {}
-
-            for measure in session.scalars(statement).all():
-                measures[measure.name] = measure.value
-
-            return measures
+            return {
+                measure.name: measure.value
+                for measure in session.scalars(statement).all()
+            }

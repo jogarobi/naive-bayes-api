@@ -48,7 +48,7 @@ async def ingest_dataset(file: UploadFile):
                 )
             except ValueError:
                 raise HTTPException(
-                    status_code=404, detail=f"ValueError: {row['is_spam']}"
+                    status_code=400, detail=f"ValueError: {row['is_spam']}"
                 )
 
     try:
@@ -69,15 +69,12 @@ async def ingest_dataset(file: UploadFile):
 @router.post("/message/predict")
 async def classify_message(message: str):
     classifier = Classifier()
-
-    prediction = classifier.get_message_prediction(message)
-    spam_prediction = prediction[0] * 100
-    not_spam_prediction = prediction[1] * 100
+    spam_prediction, not_spam_prediction = classifier.get_message_prediction(message)
 
     return {
         "prediction": "spam" if spam_prediction > not_spam_prediction else "not spam",
         "details": {
-            "spam": f"{(spam_prediction):.2f}%",
-            "not_spam": f"{(not_spam_prediction):.2f}%",
+            "spam": f"{(spam_prediction * 100):.2f}%",
+            "not_spam": f"{(not_spam_prediction * 100):.2f}%",
         },
     }
