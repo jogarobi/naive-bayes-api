@@ -24,18 +24,27 @@ class Classifier:
             self.measures["unique_spam_words"] + self.measures["unique_not_spam_words"]
         )
 
-    def get_word_likelihood(self, word: str, is_spam: bool) -> float:
-        count = 1
-        label = "total_spam_words" if is_spam else "total_not_spam_words"
-
-        word_from_dataset = self.labeled_word_service.read_word(
-            word, is_from_spam=is_spam
+    def get_word_likelihoods(
+        self, words: list[tuple[str, bool]]
+    ) -> dict[tuple[str, bool], float]:
+        words_from_dataset: dict[tuple[str, bool], int] = (
+            self.labeled_word_service.read_words(words)
         )
 
-        if len(word_from_dataset) > 0:
-            count += word_from_dataset[0]["count"]
+        likelihoods: dict[tuple[str, bool], float] = {}
 
-        return count / (self.measures[label] + self.smoother)
+        for word, is_spam in words:
+            count = 1
+            label = "total_spam_words" if is_spam else "total_not_spam_words"
+
+            if (word, is_spam) in words_from_dataset:
+                count += words_from_dataset[(word, is_spam)]
+
+            likelihoods[(word, is_spam)] = count / (
+                self.measures[label] + self.smoother
+            )
+
+        return likelihoods
 
     def get_message_prediction(self, message: str) -> tuple[float, float]:
         words = message.lower().split()
@@ -50,8 +59,10 @@ class Classifier:
                 / self.measures["total_messages"]
             )
 
+            likelihoods = self.get_word_likelihoods([(word, is_spam) for word in words])
+
             scores[label] = math.log(prior_probability) + sum(
-                math.log(self.get_word_likelihood(word, is_spam)) for word in words
+                math.log(likelihood) for likelihood in likelihoods.values()
             )
 
         highest_score = max(scores.values())

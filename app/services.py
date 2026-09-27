@@ -25,17 +25,31 @@ class LabeledMessageService:
 
 
 class LabeledWordService:
-    def read_word(self, word: str, is_from_spam: bool):
+    def read_words(self, words: list[tuple[str, bool]]) -> dict[tuple[str, bool], int]:
         with create_session() as session:
-            statement = select(LabeledWord).where(
-                LabeledWord.word.ilike(word),
-                LabeledWord.is_from_spam.__eq__(is_from_spam),
+            spam_statement = select(LabeledWord).where(
+                LabeledWord.word.in_(
+                    word for word, is_from_spam in words if is_from_spam
+                ),
+                LabeledWord.is_from_spam.__eq__(True),
             )
 
-            return [
-                {"labeled_word": labeled_word.word, "count": labeled_word.occurrences}
-                for labeled_word in list(session.scalars(statement).all())
-            ]
+            not_spam_statement = select(LabeledWord).where(
+                LabeledWord.word.in_(
+                    word for word, is_from_spam in words if not is_from_spam
+                ),
+                LabeledWord.is_from_spam.__eq__(False),
+            )
+
+            word_counts: dict[tuple[str, bool], int] = {}
+
+            for labeled_word in list(session.scalars(spam_statement).all()):
+                word_counts[(labeled_word.word, True)] = labeled_word.occurrences
+
+            for labeled_word in list(session.scalars(not_spam_statement).all()):
+                word_counts[(labeled_word.word, False)] = labeled_word.occurrences
+
+            return word_counts
 
 
 class MeasureService:
